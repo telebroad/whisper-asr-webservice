@@ -1,9 +1,14 @@
 FROM swaggerapi/swagger-ui:v4.18.2 AS swagger-ui
 ## FROM nvidia/cuda:11.7.0-base-ubuntu22.04
-FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
+FROM nvidia/cuda:12.2.0-base-ubuntu22.04
+
+
+RUN apt-get update && apt-get install -y nginx && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 
 ENV PYTHON_VERSION=3.10
 ENV POETRY_VENV=/app/.venv
+
 
 RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get -qq update \
@@ -30,15 +35,31 @@ COPY poetry.lock pyproject.toml ./
 
 RUN poetry config virtualenvs.in-project true
 RUN poetry install --no-root
+RUN $POETRY_VENV/bin/pip install torch==2.0.0+cu118 -f https://download.pytorch.org/whl/torch
+
+
 
 COPY . .
+COPY nginx.conf /etc/nginx/sites-available/default
 COPY --from=swagger-ui /usr/share/nginx/html/swagger-ui.css swagger-ui-assets/swagger-ui.css
 COPY --from=swagger-ui /usr/share/nginx/html/swagger-ui-bundle.js swagger-ui-assets/swagger-ui-bundle.js
 
+
 RUN poetry install
+
+
+
 ## pip install torch==2.0.0+cu118 torchvision==0.15.1+cu118 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu118
 
-RUN $POETRY_VENV/bin/pip install torch==2.0.0+cu118 -f https://download.pytorch.org/whl/torch
-## RUN $POETRY_VENV/bin/pip install torch==1.13.0+cu117 -f https://download.pytorch.org/whl/torch
 
-CMD gunicorn --bind 0.0.0.0:9000 --workers 1 --timeout 0 app.webservice:app -k uvicorn.workers.UvicornWorker
+## RUN $POETRY_VENV/bin/pip install torch==1.13.0+cu117 -f https://download.pytorch.org/whl/torch
+# ... (rest of your Dockerfile)
+
+
+ENTRYPOINT ["/app/gpu.start.sh"]
+
+# ENTRYPOINT [ "nginx","-g", "daemon off; &" ]
+# CMD gunicorn --bind 127.0.0.1:9001 --workers 1 --timeout 0 app.webservice:app -k uvicorn.workers.UvicornWorker
+# CMD [ "gunicorn", "--bind", "127.0.0.1:9001", "--workers", "1", "--timeout", "0", "app.webservice:app", "-k" ,"uvicorn.workers.UvicornWorker"]
+
+## docker build -t yweing0720/openai-whisper-asr-webservice:latest -f ./Dockerfile.gpu . && docker run -p 9000:9000  yweing0720/openai-whisper-asr-webservice:latest
